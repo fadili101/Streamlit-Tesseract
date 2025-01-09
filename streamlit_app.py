@@ -47,7 +47,7 @@ async def extract_text(file: UploadFile = File(...)):
 
         # Traiter l'image et extraire le texte
         extracted_text = process_image(image_stream)
-        
+        extract_text ="test"
         # Retourner le texte extrait
         return JSONResponse(content={"extracted_text": extracted_text})
     except Exception as e:
