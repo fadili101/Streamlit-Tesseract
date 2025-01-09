@@ -36,7 +36,9 @@ def process_image(image: io.BytesIO):
     # Extraire le texte avec Tesseract
     text = pytesseract.image_to_string(gray_image)
     return text
-
+@app.get('/')
+def test():
+    return {"test":"test"}
 # Endpoint de l'API pour télécharger et traiter l'image
 @app.post("/extract_text/")
 async def extract_text(file: UploadFile = File(...)):
@@ -47,7 +49,7 @@ async def extract_text(file: UploadFile = File(...)):
 
         # Traiter l'image et extraire le texte
         extracted_text = process_image(image_stream)
-        extract_text ="test"
+       
         # Retourner le texte extrait
         return JSONResponse(content={"extracted_text": extracted_text})
     except Exception as e:
