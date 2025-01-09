@@ -10,3 +10,4 @@ scipy
 # pandas
 # easyocr
 # PyMuPDF
+FastAPI
