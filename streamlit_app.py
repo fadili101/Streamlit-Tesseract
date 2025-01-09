@@ -1,59 +1,86 @@
-import streamlit as st
+from fastapi import FastAPI, File, UploadFile
+from fastapi.responses import JSONResponse
+import os
+from random import randint
+import uuid
 import io
 from PIL import Image
-import cv2
+import pytesseract
 import numpy as np
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import StreamingResponse
-from io import BytesIO
+import cv2
+
+# Assurez-vous que python-multipart est installé pour gérer les fichiers
+from fastapi import HTTPException
+
+# Dossier pour sauvegarder les images téléchargées
+IMAGEDIR = "images/"
 
 # Créez une instance de FastAPI
 app = FastAPI()
 
-# Fonction pour convertir une image PIL en OpenCV
+# Assurez-vous que le dossier pour les images existe
+os.makedirs(IMAGEDIR, exist_ok=True)
+
+# Fonction pour convertir l'image PIL en OpenCV
 def convert_to_cv2(pil_image):
     """Convert a PIL Image to an OpenCV image (numpy array)."""
     return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
 
-# Fonction pour convertir une image en niveaux de gris
-def grayscale(image):
-    """Convert an OpenCV image to grayscale."""
-    return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-# Fonction pour simuler la reconnaissance de texte avec Tesseract
-def image_to_string(image, language='eng'):
-    """Simulate text extraction using Tesseract (replace with actual Tesseract call)."""
-    # Simulez ici une extraction de texte ou utilisez pytesseract
-    import pytesseract
-    return pytesseract.image_to_string(image, lang=language)
-
-# Fonction pour traiter l'image et extraire le texte
-def process_image(image: BytesIO, language: str = 'eng'):
-    # Convertir l'image en format compatible avec OpenCV
+# Fonction pour extraire le texte d'une image
+def process_image(image: io.BytesIO):
+    # Convertir l'image en format PIL
     img = Image.open(image)
-    img = convert_to_cv2(img)  # Conversion PIL en OpenCV
-    # Appliquer un traitement sur l'image si nécessaire
-    processed_image = grayscale(img)
-    text = image_to_string(processed_image, language=language)
+    img_cv = convert_to_cv2(img)  # Conversion PIL en OpenCV
+    # Appliquer un traitement si nécessaire, comme convertir en gris
+    gray_image = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
+    # Extraire le texte avec Tesseract
+    text = pytesseract.image_to_string(gray_image)
     return text
 
-# Endpoint de l'API pour traiter l'image et renvoyer le texte extrait
-@app.post("/extract_text/", response_model=None)
+# Endpoint de l'API pour télécharger et traiter l'image
+@app.post("/extract_text/")
 async def extract_text(file: UploadFile = File(...)):
-    # Charger le fichier et traiter l'image
-    image_bytes = await file.read()
-    extracted_text = process_image(BytesIO(image_bytes))
-    byte_stream = BytesIO(extracted_text.encode())
-    return StreamingResponse(byte_stream, media_type="application/octet-stream")
+    try:
+        # Lire le fichier téléchargé
+        contents = await file.read()
+        image_stream = io.BytesIO(contents)
 
-# Pour démarrer l'application Streamlit
-if __name__ == "__main__":
-    st.title("Tesseract OCR API")
+        # Traiter l'image et extraire le texte
+        extracted_text = process_image(image_stream)
+        
+        # Retourner le texte extrait
+        return JSONResponse(content={"extracted_text": extracted_text})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    uploaded_file = st.file_uploader("Upload an image", type=["png", "jpg", "jpeg", "bmp", "tif", "tiff"])
-    if uploaded_file is not None:
-        image = uploaded_file.read()
-        st.image(image, caption="Uploaded Image", use_column_width=True)
-        if st.button("Extract Text"):
-            extracted_text = process_image(io.BytesIO(image))
-            st.text_area("Extracted Text", value=extracted_text, height=300)
+# Endpoint pour télécharger une image et la sauvegarder
+@app.post("/upload/")
+async def upload_file(file: UploadFile = File(...)):
+    try:
+        # Générer un nom unique pour le fichier
+        filename = f"{uuid.uuid4()}.jpg"
+        contents = await file.read()
+
+        # Sauvegarder le fichier dans le répertoire d'images
+        with open(f"{IMAGEDIR}{filename}", "wb") as f:
+            f.write(contents)
+
+        return {"filename": filename}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Endpoint pour récupérer une image aléatoire depuis le répertoire
+@app.get("/show/")
+async def read_random_file():
+    try:
+        # Obtenir une image aléatoire depuis le répertoire
+        files = os.listdir(IMAGEDIR)
+        if not files:
+            raise HTTPException(status_code=404, detail="No images found")
+        
+        random_index = randint(0, len(files) - 1)
+        path = f"{IMAGEDIR}{files[random_index]}"
+        
+        return FileResponse(path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
