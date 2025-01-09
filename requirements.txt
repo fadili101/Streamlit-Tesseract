@@ -11,3 +11,4 @@ scipy
 # easyocr
 # PyMuPDF
 FastAPI
+python-multipart
